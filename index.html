@@ -276,6 +276,50 @@
       font-size: 0.92rem;
     }
 
+    .category-heading-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+      align-items: stretch;
+    }
+
+    .category-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .subcategories {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .subcategory-zone {
+      min-height: 140px;
+      background: #f8fbff;
+      border-style: dashed;
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .subcategory-label {
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin: 4px 0 8px;
+    }
+
+    .category-input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: white;
+      color: var(--text);
+    }
+
     .json-box {
       width: 100%;
       min-height: 140px;
@@ -296,7 +340,7 @@
         <h1>Card Sort Builder</h1>
         <p>This repo is public. Anyone can download it, use it, and modify it as they wish!</p>
         <p>INSTRUCTIONS:<br />
-          Add cards with the large plus button, then drag them into categories. <br />
+          Add cards with the large plus button, then drag them into categories or subcategories. <br />
           To send someone a list of unsorted cards so they can sort them, use Share Link: 
           <ol>
             <li>Enter the card names individually in the Create Cards section</li>
@@ -386,7 +430,7 @@
         </div>
         <div class="field">
           <label for="instructionsInput">Instructions</label>
-          <textarea id="instructionsInput">Create cards, share this page, and ask classmates to group the cards into categories that feel logical. They can also rename the category headings.</textarea>
+          <textarea id="instructionsInput">Create cards, share this page, and ask classmates to group the cards into categories that feel logical. They can also rename the category and subcategory headings.</textarea>
         </div>
         <p class="small">Changes are saved automatically in the browser using local storage.</p>
 
@@ -404,7 +448,7 @@
         <div class="top-row">
           <div>
             <h2 id="boardTitle" style="margin: 0 0 4px;">Sort these cards into groups that make sense to you</h2>
-            <div class="status" id="boardInstructions">Create cards, share this page, and ask classmates to group the cards into categories that feel logical. They can also rename the category headings.</div>
+            <div class="status" id="boardInstructions">Create cards, share this page, and ask classmates to group the cards into categories that feel logical. They can also rename the category and subcategory headings.</div>
           </div>
           <div class="status" id="cardCount">0 cards</div>
         </div>
@@ -432,7 +476,7 @@
 
     const state = {
       title: 'Sort these cards into groups that make sense to you',
-      instructions: 'Create cards, share this page, and ask classmates to group the cards into categories that feel logical. They can also rename the category headings.',
+      instructions: 'Create cards, share this page, and ask classmates to group the cards into categories that feel logical. They can also rename the category and subcategory headings.',
       cards: [],
       categories: []
     };
@@ -512,9 +556,9 @@
         state.categories = Array.isArray(parsed.categories) && parsed.categories.length
           ? parsed.categories
           : [
-              { id: uid(), name: 'Group 1' },
-              { id: uid(), name: 'Group 2' },
-              { id: uid(), name: 'Group 3' }
+              { id: uid(), name: 'Group 1', parentId: null },
+              { id: uid(), name: 'Group 2', parentId: null },
+              { id: uid(), name: 'Group 3', parentId: null }
             ];
         return true;
       } catch {
@@ -526,9 +570,9 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) {
         state.categories = [
-          { id: uid(), name: 'Group 1' },
-          { id: uid(), name: 'Group 2' },
-          { id: uid(), name: 'Group 3' }
+          { id: uid(), name: 'Group 1', parentId: null },
+          { id: uid(), name: 'Group 2', parentId: null },
+          { id: uid(), name: 'Group 3', parentId: null }
         ];
         return;
       }
@@ -541,17 +585,25 @@
         state.categories = Array.isArray(parsed.categories) && parsed.categories.length
           ? parsed.categories
           : [
-              { id: uid(), name: 'Group 1' },
-              { id: uid(), name: 'Group 2' },
-              { id: uid(), name: 'Group 3' }
+              { id: uid(), name: 'Group 1', parentId: null },
+              { id: uid(), name: 'Group 2', parentId: null },
+              { id: uid(), name: 'Group 3', parentId: null }
             ];
       } catch {
         state.categories = [
-          { id: uid(), name: 'Group 1' },
-          { id: uid(), name: 'Group 2' },
-          { id: uid(), name: 'Group 3' }
+          { id: uid(), name: 'Group 1', parentId: null },
+          { id: uid(), name: 'Group 2', parentId: null },
+          { id: uid(), name: 'Group 3', parentId: null }
         ];
       }
+    }
+
+    function normalizeCategories() {
+      state.categories.forEach(category => {
+        if (!Object.prototype.hasOwnProperty.call(category, 'parentId')) {
+          category.parentId = null;
+        }
+      });
     }
 
     function addCard(text) {
@@ -564,8 +616,39 @@
     }
 
     function addCategory(name = '') {
-      const count = state.categories.length + 1;
-      state.categories.push({ id: uid(), name: name || `Group ${count}` });
+      const count = state.categories.filter(category => !category.parentId).length + 1;
+      state.categories.push({ id: uid(), name: name || `Group ${count}`, parentId: null });
+      render();
+      save();
+    }
+
+    function addSubcategory(parentId) {
+      const parent = state.categories.find(category => category.id === parentId);
+      if (!parent) return;
+      const count = state.categories.filter(category => category.parentId === parentId).length + 1;
+      state.categories.push({ id: uid(), name: `Subcategory ${count}`, parentId });
+      render();
+      save();
+    }
+
+    function getChildCategories(parentId) {
+      return state.categories.filter(category => category.parentId === parentId);
+    }
+
+    function getCategoryAndDescendantIds(categoryId) {
+      const ids = [categoryId];
+      getChildCategories(categoryId).forEach(child => {
+        ids.push(...getCategoryAndDescendantIds(child.id));
+      });
+      return ids;
+    }
+
+    function deleteCategory(categoryId) {
+      const idsToDelete = getCategoryAndDescendantIds(categoryId);
+      state.cards.forEach(card => {
+        if (idsToDelete.includes(card.zone)) card.zone = 'bank';
+      });
+      state.categories = state.categories.filter(category => !idsToDelete.includes(category.id));
       render();
       save();
     }
@@ -593,7 +676,7 @@
       node.dataset.cardId = card.id;
       node.querySelector('.card-text').textContent = card.text;
 
-      node.addEventListener('dragstart', () => {
+      node.addEventListener('dragstart', event => {
         node.classList.add('dragging');
         event.dataTransfer.setData('text/plain', card.id);
       });
@@ -647,7 +730,13 @@
       els.importedBankZone.classList.toggle('empty', importedBankCards.length === 0);
 
       els.importedCategories.innerHTML = '';
-      safeCategories.forEach(category => {
+
+      const childCategoriesForImport = parentId => safeCategories.filter(category => {
+        const categoryParentId = category.parentId || null;
+        return categoryParentId === parentId;
+      });
+
+      childCategoriesForImport(null).forEach(category => {
         const wrapper = document.createElement('section');
         wrapper.className = 'dropzone';
 
@@ -659,8 +748,33 @@
         list.className = 'card-list';
         const cards = safeCards.filter(card => card.zone === category.id);
         cards.forEach(card => list.appendChild(renderImportedCard(card)));
-        wrapper.classList.toggle('empty', cards.length === 0);
         wrapper.appendChild(list);
+
+        const childCategories = childCategoriesForImport(category.id);
+        if (childCategories.length) {
+          const subcategoryWrap = document.createElement('div');
+          subcategoryWrap.className = 'subcategories';
+          childCategories.forEach(subcategory => {
+            const subWrapper = document.createElement('section');
+            subWrapper.className = 'dropzone subcategory-zone';
+
+            const subheading = document.createElement('div');
+            subheading.className = 'subcategory-label';
+            subheading.textContent = subcategory.name || 'Untitled subcategory';
+            subWrapper.appendChild(subheading);
+
+            const subList = document.createElement('div');
+            subList.className = 'card-list';
+            const subCards = safeCards.filter(card => card.zone === subcategory.id);
+            subCards.forEach(card => subList.appendChild(renderImportedCard(card)));
+            subWrapper.classList.toggle('empty', subCards.length === 0);
+            subWrapper.appendChild(subList);
+            subcategoryWrap.appendChild(subWrapper);
+          });
+          wrapper.appendChild(subcategoryWrap);
+        }
+
+        wrapper.classList.toggle('empty', cards.length === 0 && childCategories.length === 0);
         els.importedCategories.appendChild(wrapper);
       });
     }
@@ -704,45 +818,44 @@
       bankZone.classList.toggle('empty', bankCards.length === 0);
 
       els.categories.innerHTML = '';
-      state.categories.forEach(category => {
+      const topLevelCategories = getChildCategories(null);
+
+      topLevelCategories.forEach(category => {
         const wrapper = document.createElement('section');
         wrapper.className = 'dropzone';
         wrapper.dataset.zone = category.id;
 
         const headingRow = document.createElement('div');
-        headingRow.style.display = 'flex';
-        headingRow.style.flexDirection = 'column';
-        headingRow.style.gap = '8px';
-        headingRow.style.marginBottom = '10px';
-        headingRow.style.alignItems = 'center';
+        headingRow.className = 'category-heading-row';
 
         const input = document.createElement('input');
+        input.className = 'category-input';
         input.value = category.name;
         input.setAttribute('aria-label', 'Category name');
-        input.style.flex = '1';
-        input.style.border = '1px solid var(--border)';
-        input.style.borderRadius = '10px';
-        input.style.padding = '8px 10px';
         input.addEventListener('input', () => {
           category.name = input.value;
           save();
         });
 
+        const controls = document.createElement('div');
+        controls.className = 'category-controls';
+
+        const addSubcategoryBtn = document.createElement('button');
+        addSubcategoryBtn.className = 'btn';
+        addSubcategoryBtn.type = 'button';
+        addSubcategoryBtn.textContent = 'Add subcategory';
+        addSubcategoryBtn.addEventListener('click', () => addSubcategory(category.id));
+
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn btn-danger';
         deleteBtn.type = 'button';
         deleteBtn.textContent = 'Delete';
-        deleteBtn.addEventListener('click', () => {
-          state.cards.forEach(card => {
-            if (card.zone === category.id) card.zone = 'bank';
-          });
-          state.categories = state.categories.filter(c => c.id !== category.id);
-          render();
-          save();
-        });
+        deleteBtn.addEventListener('click', () => deleteCategory(category.id));
 
+        controls.appendChild(addSubcategoryBtn);
+        controls.appendChild(deleteBtn);
         headingRow.appendChild(input);
-        headingRow.appendChild(deleteBtn);
+        headingRow.appendChild(controls);
 
         const list = document.createElement('div');
         list.className = 'card-list';
@@ -750,9 +863,56 @@
         const cards = state.cards.filter(card => card.zone === category.id);
         cards.forEach(card => list.appendChild(renderCard(card)));
 
-        wrapper.classList.toggle('empty', cards.length === 0);
         wrapper.appendChild(headingRow);
         wrapper.appendChild(list);
+
+        const childCategories = getChildCategories(category.id);
+        if (childCategories.length) {
+          const subcategories = document.createElement('div');
+          subcategories.className = 'subcategories';
+
+          childCategories.forEach(subcategory => {
+            const subWrapper = document.createElement('section');
+            subWrapper.className = 'dropzone subcategory-zone';
+            subWrapper.dataset.zone = subcategory.id;
+
+            const subHeadingRow = document.createElement('div');
+            subHeadingRow.className = 'category-heading-row';
+
+            const subInput = document.createElement('input');
+            subInput.className = 'category-input';
+            subInput.value = subcategory.name;
+            subInput.setAttribute('aria-label', 'Subcategory name');
+            subInput.addEventListener('input', () => {
+              subcategory.name = subInput.value;
+              save();
+            });
+
+            const subDeleteBtn = document.createElement('button');
+            subDeleteBtn.className = 'btn btn-danger';
+            subDeleteBtn.type = 'button';
+            subDeleteBtn.textContent = 'Delete subcategory';
+            subDeleteBtn.addEventListener('click', () => deleteCategory(subcategory.id));
+
+            subHeadingRow.appendChild(subInput);
+            subHeadingRow.appendChild(subDeleteBtn);
+
+            const subList = document.createElement('div');
+            subList.className = 'card-list';
+            const subCards = state.cards.filter(card => card.zone === subcategory.id);
+            subCards.forEach(card => subList.appendChild(renderCard(card)));
+
+            subWrapper.classList.toggle('empty', subCards.length === 0);
+            subWrapper.appendChild(subHeadingRow);
+            subWrapper.appendChild(subList);
+            subcategories.appendChild(subWrapper);
+            makeDropzoneActive(subWrapper);
+          });
+
+          wrapper.appendChild(subcategories);
+        }
+
+        wrapper.classList.toggle('empty', cards.length === 0 && childCategories.length === 0);
         els.categories.appendChild(wrapper);
         makeDropzoneActive(wrapper);
       });
@@ -843,7 +1003,7 @@
       if (!confirm('Reset the board and remove all cards?')) return;
       localStorage.removeItem(STORAGE_KEY);
       state.title = 'Sort these cards into groups that make sense to you';
-      state.instructions = 'Create cards, share this page, and ask classmates to group the cards into categories that feel logical. They can also rename the category headings.';
+      state.instructions = 'Create cards, share this page, and ask classmates to group the cards into categories that feel logical. They can also rename the category and subcategory headings.';
       state.cards = [];
       state.categories = [
         { id: uid(), name: 'Group 1' },
@@ -869,6 +1029,7 @@
     if (!loadFromUrl()) {
       load();
     }
+    normalizeCategories();
     render();
     save();
     clearImportedSort();
